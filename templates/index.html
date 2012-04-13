@@ -53,24 +53,46 @@
 
 
 
-	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-	<script src="/static/js/ace/build/src/ace-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/theme-twilight-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/mode-xml-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/mode-javascript-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/mode-perl-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/mode-csharp-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/mode-json-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script src="/static/js/ace/build/src/mode-text-noconflict.js" type="text/javascript" charset="utf-8"></script>
-	<script type="text/javascript" src="/static/js/base64.js" charset="utf-8"></script>
-	<script type="text/javascript" src="/static/js/rawdeflate.js" charset="utf-8"></script>
-	<script type="text/javascript" src="/static/js/rawinflate.js" charset="utf-8"></script>
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/ace-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/mode-xml-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/mode-javascript-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/mode-perl-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/mode-csharp-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/mode-json-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/ace/build/src/mode-text-noconflict.js" type="text/javascript"></script>
+	<script src="/static/js/base64.js" type="text/javascript"></script>
+	<script src="/static/js/rawdeflate.js" type="text/javascript"></script>
+	<script src="/static/js/rawinflate.js" type="text/javascript"></script>
 	<script type="text/javascript">
 
 		function initEditor() {
-			window.aceEditor = ace.edit("input-field");			window.aceEditor.setTheme("ace/theme/twilight");
-
+			window.aceEditor = ace.edit("input-field");
+			window.aceEditor.setTheme("ace/theme/monokai");
+			window.aceEditor.renderer.setShowPrintMargin(false);
+			window.aceEditor.setHighlightActiveLine(false);
 		};
+
+		function setAceMode( language ){
+			var XMLMode = ace.require("ace/mode/xml").Mode
+				, JSMode = ace.require("ace/mode/javascript").Mode
+				, PerlMode = ace.require("ace/mode/perl").Mode
+				, CsharpMode = ace.require("ace/mode/csharp").Mode
+				, JSONMode = ace.require("ace/mode/json").Mode
+				, TextMode = ace.require("ace/mode/text").Mode
+
+			if ( language === 'text'){
+				window.aceEditor.getSession().setMode(new TextMode());
+			}else if( language === 'javascript'){
+				window.aceEditor.getSession().setMode(new JSMode());
+			}else if( language === 'json'){
+				window.aceEditor.getSession().setMode(new JSONMode());
+			}else if( language === 'csharp'){
+				window.aceEditor.getSession().setMode(new CsharpMode());
+			}else if( language === 'perl'){
+				window.aceEditor.getSession().setMode(new PerlMode());
+			}
+		}
 
 		$(function(){
 
@@ -109,27 +131,7 @@
 			};
 
 			$('#language').change(function(){
-				var XMLMode = ace.require("ace/mode/xml").Mode
-					, JSMode = ace.require("ace/mode/javascript").Mode
-					, PerlMode = ace.require("ace/mode/perl").Mode
-					, CsharpMode = ace.require("ace/mode/csharp").Mode
-					, JSONMode = ace.require("ace/mode/json").Mode
-					, TextMode = ace.require("ace/mode/text").Mode
-					, language = this.value;
-
-				switch( language ){
-					case 'text':
-						window.aceEditor.getSession().setMode(new TextMode());
-					case 'javascript':
-						window.aceEditor.getSession().setMode(new JSMode());
-					case 'json':
-						window.aceEditor.getSession().setMode(new JSONMode());
-					case 'csharp':
-						window.aceEditor.getSession().setMode(new CsharpMode());
-					case 'perl':
-						window.aceEditor.getSession().setMode(new PerlMode());
-				}
-
+				setAceMode(this.value)
 			})
 
 			$('#save-button').click(function(){
@@ -159,7 +161,9 @@
 			});
 
 			if (window.location.hash) {
+				get_short_url(window.location.href);
 				encoded = window.location.hash.replace(/^#/, '');
+				window.location.hash = '';
 				base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
 				//check = parseInt(encoded.slice(encoded.length - 1, encoded.length + 1 || 9e9));
 				//if (check !== checksum(base64)) {
@@ -170,6 +174,7 @@
 				var decoded_input = JSON.parse(input)
 				$('#language').val(decoded_input.language)
 				window.aceEditor.getSession().setValue(decoded_input.paste_data)
+				setAceMode(decoded_input.language)
 				return true
 				//}
 			}
