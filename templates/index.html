@@ -17,11 +17,16 @@
 		input, textarea, button {
 			font: 15px 'Monaco', 'Bitstream Vera Sans', 'Courier', monospace;
 		}
+		body {
+			overflow: hidden;
+		}
 
-		textarea{
-			padding: 10px;
-			width: 100%;
-			height: 400px;
+		#input-field {
+			position: absolute;
+			left: 10px;
+			right:10px;
+			bottom:20px;
+			top:175px;
 		}
 	</style>
 </head>
@@ -31,12 +36,14 @@
 		<span style='float:right'>
 			<label for='language'>Language:</label>
 			<select id='language'>
-				<option value='plaintext'>Plaintext</option>
+				<option value='text'>Plaintext</option>
 				<option value='javascript'>Javascript</option>
+				<option value='json'>JSON</option>
+				<option value='csharp'>C#</option>
 				<option value='perl'>Perl</option>
 			</select>
 		</span>
-		<textarea id="input-field"></textarea>
+		<div id="input-field"></div>
 		<button id="save-button">Save</button>
 		<span style='float:right'>
 			<label for='short_url'>Short URL:</label>
@@ -47,11 +54,28 @@
 
 
 	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-	<script type="text/javascript" src="/static/js/base64.js"></script>
-	<script type="text/javascript" src="/static/js/rawdeflate.js"></script>
-	<script type="text/javascript" src="/static/js/rawinflate.js"></script>
+	<script src="/static/js/ace/build/src/ace-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/theme-twilight-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/mode-xml-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/mode-javascript-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/mode-perl-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/mode-csharp-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/mode-json-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script src="/static/js/ace/build/src/mode-text-noconflict.js" type="text/javascript" charset="utf-8"></script>
+	<script type="text/javascript" src="/static/js/base64.js" charset="utf-8"></script>
+	<script type="text/javascript" src="/static/js/rawdeflate.js" charset="utf-8"></script>
+	<script type="text/javascript" src="/static/js/rawinflate.js" charset="utf-8"></script>
 	<script type="text/javascript">
+
+		function initEditor() {
+			window.aceEditor = ace.edit("input-field");			window.aceEditor.setTheme("ace/theme/twilight");
+
+		};
+
 		$(function(){
+
+			initEditor();
+
 			var base64
 			, check
 			, checksum
@@ -65,8 +89,8 @@
 					"http://api.bitly.com/v3/shorten?callback=?"
 					, {
 						"format": "json"
-						, "apiKey": ""
-						, "login": ""
+						, "apiKey": "R_db4dda4e46e10ee6f38868ecf63359c5"
+						, "login": "tjkells"
 						, "longUrl": url
 					},
 					function(res){
@@ -78,12 +102,35 @@
 				var chk, chr, i;
 				chk = 0;
 				for (i in string) {
-				chr = string[i];
-				chk += chr.charCodeAt(0) * (i + 1);
-			}
+					chr = string[i];
+					chk += chr.charCodeAt(0) * (i + 1);
+				}
 				return chk % 10;
 			};
 
+			$('#language').change(function(){
+				var XMLMode = ace.require("ace/mode/xml").Mode
+					, JSMode = ace.require("ace/mode/javascript").Mode
+					, PerlMode = ace.require("ace/mode/perl").Mode
+					, CsharpMode = ace.require("ace/mode/csharp").Mode
+					, JSONMode = ace.require("ace/mode/json").Mode
+					, TextMode = ace.require("ace/mode/text").Mode
+					, language = this.value;
+
+				switch( language ){
+					case 'text':
+						window.aceEditor.getSession().setMode(new TextMode());
+					case 'javascript':
+						window.aceEditor.getSession().setMode(new JSMode());
+					case 'json':
+						window.aceEditor.getSession().setMode(new JSONMode());
+					case 'csharp':
+						window.aceEditor.getSession().setMode(new CsharpMode());
+					case 'perl':
+						window.aceEditor.getSession().setMode(new PerlMode());
+				}
+
+			})
 
 			$('#save-button').click(function(){
 				var base64
@@ -93,7 +140,7 @@
 					, input
 					, data;
 
-				input = $('#input-field').val();
+				input = window.aceEditor.getSession().getValue()
 				language = $('#language').val();
 
 				//Add on some meta-data wooooo
@@ -101,13 +148,11 @@
 					"paste_data": input
 					,"language": language
 				}
-
 				deflated = RawDeflate.deflate(JSON.stringify(data));
 				base64 = Base64.toBase64(deflated);
-
 				//generate a checksum and tack it onto the end of the base64 encoded string
-				check = checksum(base64);
-				encoded = base64 + check;
+				//check = checksum(base64);
+				encoded = base64 //+ check;
 				window.location.hash = encoded;
 				get_short_url(window.location.href);
 
@@ -116,17 +161,17 @@
 			if (window.location.hash) {
 				encoded = window.location.hash.replace(/^#/, '');
 				base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
-				check = parseInt(encoded.slice(encoded.length - 1, encoded.length + 1 || 9e9));
-				if (check !== checksum(base64)) {
-					return alert('Something got corrupted :(');
-				} else {
-					deflated = Base64.fromBase64(base64);
-					input = RawDeflate.inflate(deflated);
-					var decoded_input = JSON.parse(input)
-					$('#language').val(decoded_input.language)
-					$('#input-field').val(decoded_input.paste_data);
-					return true
-				}
+				//check = parseInt(encoded.slice(encoded.length - 1, encoded.length + 1 || 9e9));
+				//if (check !== checksum(base64)) {
+				//	return alert('Something got corrupted :(');
+				//} else {
+				deflated = Base64.fromBase64(base64);
+				input = RawDeflate.inflate(deflated);
+				var decoded_input = JSON.parse(input)
+				$('#language').val(decoded_input.language)
+				window.aceEditor.getSession().setValue(decoded_input.paste_data)
+				return true
+				//}
 			}
 		})
 	</script>
