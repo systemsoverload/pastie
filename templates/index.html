@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+	<style type='text/css'>
+		body {
+			margin: 0px;
+			padding: 0px;
+			font: 1.6em 'Georgia', 'Tahoma', serif;
+			color: #333;
+		}
+
+		#content {
+			width: 940px;
+			margin: 0 auto;
+		}
+
+		input, textarea, button {
+			font: 15px 'Monaco', 'Bitstream Vera Sans', 'Courier', monospace;
+		}
+
+		textarea{
+			padding: 10px;
+			width: 100%;
+			height: 400px;
+		}
+	</style>
+</head>
+<body>
+	<div id="content">
+		<h1>Pastie</h1>
+		<span style='float:right'>
+			<label for='language'>Language:</label>
+			<select>
+				<option value='plaintext'>Plaintext</option>
+				<option value='javascript'>Javascript</option>
+				<option value='perl'>Perl</option>
+			</select>
+		</span>
+		<textarea id="input-field"></textarea>
+		<button id="save-button">Save</button>
+		<span style='float:right'>
+			<label for='short_url'>Short URL:</label>
+			<input type='text' disabled='disabled' id='short_url'></input>
+		</span>
+	</div>
+
+
+
+	<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+	<script type="text/javascript" src="/static/js/base64.js"></script>
+	<script type="text/javascript" src="/static/js/rawdeflate.js"></script>
+	<script type="text/javascript" src="/static/js/rawinflate.js"></script>
+	<script type="text/javascript">
+		$(function(){
+			var base64
+			, check
+			, checksum
+			, deflated
+			, encoded
+			, input
+			, get_short_url;
+
+			get_short_url = function(url){
+				$.getJSON(
+					"http://api.bitly.com/v3/shorten?callback=?"
+					, {
+						"format": "json"
+						, "apiKey": ''
+						, "login": ''
+						, "longUrl": url
+					},
+					function(res){
+						$('#short_url').val(res.data.url)
+					}
+				);
+			}
+			checksum = function(string) {
+				var chk, chr, i;
+				chk = 0;
+				for (i in string) {
+				chr = string[i];
+				chk += chr.charCodeAt(0) * (i + 1);
+			}
+				return chk % 10;
+			};
+
+
+			$('#save-button').click(function(){
+				var base64
+					, check
+					, deflated
+					, encoded
+					, input
+					, data;
+
+				input = $('#input-field').val();
+				language = $('#language').val();
+
+				//Add on some meta-data wooooo
+				data = {
+					"paste_data": input
+					,"language": language
+				}
+
+				deflated = RawDeflate.deflate(JSON.stringify(data));
+				base64 = Base64.toBase64(deflated);
+
+				//generate a checksum and tack it onto the end of the base64 encoded string
+				check = checksum(base64);
+				encoded = base64 + check;
+				window.location.hash = encoded;
+				get_short_url(window.location.href);
+
+			});
+
+			if (window.location.hash) {
+				encoded = window.location.hash.replace(/^#/, '');
+				base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
+				check = parseInt(encoded.slice(encoded.length - 1, encoded.length + 1 || 9e9));
+				if (check !== checksum(base64)) {
+					return alert('Something got corrupted :(');
+				} else {
+					deflated = Base64.fromBase64(base64);
+					input = RawDeflate.inflate(deflated);
+					var decoded_input = JSON.parse(input)
+					return $('#input-field').val(decoded_input.paste_data);
+				}
+			}
+		})
+	</script>
+
+</body>
+</html>
