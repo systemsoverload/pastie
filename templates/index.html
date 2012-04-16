@@ -36,14 +36,11 @@
 		<span style='float:right'>
 			<label for='language'>Language:</label>
 			<select id='language'>
-
-				<option value='csharp'>C#</option>
-				<option value='html'>HTML</option>
+				<option value='text'>Plaintext</option>
 				<option value='javascript'>Javascript</option>
 				<option value='json'>JSON</option>
+				<option value='csharp'>C#</option>
 				<option value='perl'>Perl</option>
-				<option value='text'>Text</option>
-
 			</select>
 		</span>
 		<div id="input-field"></div>
@@ -64,7 +61,6 @@
 	<script src="/static/js/ace/build/src/mode-csharp-noconflict.js" type="text/javascript"></script>
 	<script src="/static/js/ace/build/src/mode-json-noconflict.js" type="text/javascript"></script>
 	<script src="/static/js/ace/build/src/mode-text-noconflict.js" type="text/javascript"></script>
-	<script src="/static/js/ace/build/src/mode-html-noconflict.js" type="text/javascript"></script>
 	<script src="/static/js/base64.js" type="text/javascript"></script>
 	<script src="/static/js/rawdeflate.js" type="text/javascript"></script>
 	<script src="/static/js/rawinflate.js" type="text/javascript"></script>
@@ -84,7 +80,6 @@
 				, CsharpMode = ace.require("ace/mode/csharp").Mode
 				, JSONMode = ace.require("ace/mode/json").Mode
 				, TextMode = ace.require("ace/mode/text").Mode
-				, HTMLMode = ace.require("ace/mode/html").Mode
 
 			if ( language === 'text'){
 				window.aceEditor.getSession().setMode(new TextMode());
@@ -96,8 +91,6 @@
 				window.aceEditor.getSession().setMode(new CsharpMode());
 			}else if( language === 'perl'){
 				window.aceEditor.getSession().setMode(new PerlMode());
-			}else if( language === 'html'){
-				window.aceEditor.getSession().setMode(new HTMLMode());
 			}
 		}
 
@@ -111,9 +104,10 @@
 			, deflated
 			, encoded
 			, input
-			, get_short_url;
+			, chunkEncoded
+			, getShortUrl;
 
-			get_short_url = function(url){
+			getShortUrl = function(url){
 				$.getJSON(
 					"http://api.bitly.com/v3/shorten?callback=?"
 					, {
@@ -137,8 +131,21 @@
 				return chk % 10;
 			};
 
+			chunkEncoded = function(encoded){
+				var chunks = [];
+				while( encoded.length > 25 ){
+				    chunks.push(encoded.slice(0,24));
+				    encoded = encoded.slice(24,encoded.length);
+				}
+				chunks.push(encoded)
+				for (var i = 0; i < chunks.length; i++) {
+					var chunk = chunks[i]
+
+				};
+			};
+
 			$('#language').change(function(){
-				setAceMode(this.value)
+				setAceMode(this.value);
 			})
 
 			$('#save-button').click(function(){
@@ -147,7 +154,6 @@
 					, deflated
 					, encoded
 					, input
-					, longURL
 					, data;
 
 				input = window.aceEditor.getSession().getValue()
@@ -158,24 +164,23 @@
 					"paste_data": input
 					,"language": language
 				}
-
-				//Compress the paste data after its been cast to a string
 				deflated = RawDeflate.deflate(JSON.stringify(data));
-				//Base64 Encode compressed data
 				base64 = Base64.toBase64(deflated);
-
-
-				// FIXME - checksum broken for now...
 				//generate a checksum and tack it onto the end of the base64 encoded string
 				//check = checksum(base64);
-				encoded = base64 //+ check;
-				longURL = window.location.href.replace(/#/, '') +'#'+ encodeURIComponent(encoded);
-				get_short_url(longURL);
+				encoded = base64; //+ check;
+				// window.location.hash = encoded;
+				if ( encoded.length > 2047 ){
+					chunkEncoded( encoded );
+				}else{
+					longurl = window.location.href.replace(/#/, '') + '#' + encoded;
+					getShortUrl( longurl );
+				}
 
 			});
 
 			if (window.location.hash) {
-				get_short_url(window.location.href);
+				getShortUrl(window.location.href);
 				encoded = window.location.hash.replace(/^#/, '');
 				window.location.hash = '';
 				base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
@@ -189,6 +194,7 @@
 				$('#language').val(decoded_input.language)
 				window.aceEditor.getSession().setValue(decoded_input.paste_data)
 				setAceMode(decoded_input.language)
+				return true
 				//}
 			}
 		})
