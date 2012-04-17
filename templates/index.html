@@ -64,6 +64,7 @@
 	<script src="/static/js/base64.js" type="text/javascript"></script>
 	<script src="/static/js/rawdeflate.js" type="text/javascript"></script>
 	<script src="/static/js/rawinflate.js" type="text/javascript"></script>
+	<script src="/static/js/sjcl.js" type="text/javascript"></script>
 	<script type="text/javascript">
 
 		function initEditor() {
@@ -71,7 +72,7 @@
 			window.aceEditor.setTheme("ace/theme/monokai");
 			window.aceEditor.renderer.setShowPrintMargin(false);
 			window.aceEditor.setHighlightActiveLine(false);
-		};
+		}
 
 		function setAceMode( language ){
 			var XMLMode = ace.require("ace/mode/xml").Mode
@@ -107,6 +108,7 @@
 			, chunkEncoded
 			, expandShortUrl
 			, loadData
+			, packData
 			, getShortUrl;
 
 			getShortUrl = function(url){
@@ -121,17 +123,6 @@
 					}
 				});
 			};
-			//FIXME
-			loadData = function(encoded){
-				base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
-				deflated = Base64.fromBase64(base64);
-				input = RawDeflate.inflate(deflated);
-				var decoded_input = JSON.parse(input);
-				$('#language').val(decoded_input.language);
-
-				window.aceEditor.getSession().setValue(decoded_input.paste_data);
-				setAceMode(decoded_input.language);
-			}
 
 			expandShortUrl = function(hash){
 				return $.ajax({
@@ -157,20 +148,28 @@
 			};
 
 			chunkEncoded = function(encoded){
-				var chunks = [];
-				chunkUrls = [];
+				var chunksObj = {}
+					, chunks = []
+					, chunkUrls = []
+					, chunkUrls2 = [];
 
-				while( encoded.length > 2000 ){
-				    chunks.push(encoded.slice(0,2000));
-				    encoded = encoded.slice(2000,encoded.length);
+				//Stuff 2000 character strings into an array
+ 				while( encoded.length > 2000 ){
+					chunksObj[ Object.keys(chunks).length ] = encoded.slice(0,2000);
+					chunks.push(encoded.slice(0,2000));
+					encoded = encoded.slice(2000,encoded.length);
 				}
 
+				//Stuff the remainder into the array
+				chunksObj[ Object.keys(chunks).length ] = encoded;
 				chunks.push(encoded);
+				console.log( chunksObj )
 
-				for (var i = 0; i < chunks.length; i++) {
-					var chunk = chunks[i];
+				for( var k in chunksObj){
+					var chunk = chunksObj[k];
 					getShortUrl(window.location.href.replace(/#/, '') + '#' + chunk).success(function(res){
 						chunkUrls.push( res.data.url.split('http://bit.ly/')[1] );
+						console.log( chunkUrls )
 						if (chunks.length == chunkUrls.length){
 							getShortUrl(window.location.href.replace(/#/,'')+'#expand='+chunkUrls)
 								.success(function(res){
@@ -179,22 +178,30 @@
 						}
 					});
 				}
+				for (var i = 0; i < chunks.length; i++) {
+					var chunk = chunks[i];
+					getShortUrl(window.location.href.replace(/#/, '') + '#' + chunk).success(function(res){
+						chunkUrls.push( res.data.url.split('http://bit.ly/')[1] );
+						console.log( chunkUrls )
+						if (chunks.length == chunkUrls.length){
+							getShortUrl(window.location.href.replace(/#/,'')+'#expand='+chunkUrls)
+								.success(function(res){
+									$('#short_url').val(res.data.url);
+								});
+						}
+					});
 
-			};
+				}
+ 			};
 
-			$('#language').change(function(){
-				setAceMode(this.value);
-			})
-
-			$('#save-button').click(function(){
+			packData = function(input){
 				var base64
-					, check
+					, encrypted
 					, deflated
 					, encoded
-					, input
+					, language
 					, data;
 
-				input = window.aceEditor.getSession().getValue();
 				language = $('#language').val();
 
 				//Add on some meta-data wooooo
@@ -202,42 +209,86 @@
 					"paste_data": input
 					,"language": language
 				}
-				deflated = RawDeflate.deflate(JSON.stringify(data));
+
+				//Encrypt
+				encrypted = sjcl.encrypt("somebiglongsecretkeygoeshere",JSON.stringify(data));
+				//Deflate
+				deflated = RawDeflate.deflate(encrypted);
+
+				//Base64 Encode
 				base64 = Base64.toBase64(deflated);
+
 				encoded = base64;
 
 				if ( encoded.length > 2047 ){
+					console.log(encoded)
 					chunkEncoded( encoded );
 				}else{
 					longurl = window.location.href.replace(/#/, '') + '#' + encoded;
 					getShortUrl(longurl).success(function(res){ $('#short_url').val(res.data.url); });
 				}
+			};
 
+			unpackData = function(input){
+				console.log(input)
+				var base64
+					, decrypted
+					, deflated
+					, inflated
+					, decoded_input;
+
+				base64 = input.slice(0, (input.length - 2) + 1 || 9e9);
+				deflated = Base64.fromBase64(base64);
+
+				//Inflate
+				inflated = RawDeflate.inflate(deflated);
+				//Decrypt Inflated
+				decrypted = sjcl.decrypt('somebiglongsecretkeygoeshere',inflated);
+				//Parse into native object
+				decoded_input = JSON.parse(decrypted);
+				loadData(decoded_input);
+			};
+
+			loadData = function(data){
+				$('#language').val(data.language);
+				window.aceEditor.getSession().setValue(data.paste_data);
+				setAceMode(data.language);
+			};
+
+			$('#language').change(function(){
+				setAceMode(this.value);
+			})
+
+			$('#save-button').click(function(){
+				input = window.aceEditor.getSession().getValue();
+				packData(input);
 			});
 
 			if (window.location.hash) {
 				getShortUrl(window.location.href).success(function(res){ $('#short_url').val(res.data.url); });
-				encoded = window.location.hash.replace(/^#/, '');
+				hash = window.location.hash.replace(/^#/, '');
 				window.location.hash = '';
 
-				if (encoded.lastIndexOf("expand", 0) === 0){
-					//expand multiple bit.ly urls here and decode the returned mega-hash
+				//If the hash starts with 'expand' we know we have to blow out the list of hashes
+				// and expand multiple bit.ly urls here and decode the returned mega-hash
+				if (hash.lastIndexOf("expand", 0) === 0){
 
 					//bitly hashes are comma-separated
-					var hashes = encoded.split('expand=')[1].split(',')
+					var hashes = hash.split('expand=')[1].split(',')
 						,expanded = [];
 					for (var i = 0; i < hashes.length; i++) {
 						var hash = hashes[i];
 						expandShortUrl(hash).success(function(res){
 							expanded.push( res.data.expand[0].long_url.split('http://127.0.0.1:5000/#')[1] );
 							if(expanded.length == hashes.length ){
-								encoded = expanded.join('');
-								loadData(encoded);
+								console.log(expanded)
+								hash = expanded.join('');
+								unpackData(hash);
 							}
 						});
 					};
 				}else{
-					loadData(encoded);
+					unpackData(hash);
 				}
 			}
 		});
