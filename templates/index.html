@@ -108,19 +108,22 @@
 			, getShortUrl;
 
 			getShortUrl = function(url){
-				$.getJSON(
-					"http://api.bitly.com/v3/shorten?callback=?"
-					, {
+				return $.ajax({
+					url:"http://api.bitly.com/v3/shorten?callback=?"
+					, dataType: 'json'
+					, data: {
 						"format": "json"
 						, "apiKey": "R_db4dda4e46e10ee6f38868ecf63359c5"
 						, "login": "tjkells"
 						, "longUrl": url
-					},
-					function(res){
-						$('#short_url').val(res.data.url)
 					}
-				);
-			}
+					, success: function(res){
+						shortUrl = res.data.url;
+						return shortUrl;
+					}
+				});
+			};
+
 			checksum = function(string) {
 				var chk, chr, i;
 				chk = 0;
@@ -133,15 +136,28 @@
 
 			chunkEncoded = function(encoded){
 				var chunks = [];
-				while( encoded.length > 25 ){
-				    chunks.push(encoded.slice(0,24));
-				    encoded = encoded.slice(24,encoded.length);
-				}
-				chunks.push(encoded)
-				for (var i = 0; i < chunks.length; i++) {
-					var chunk = chunks[i]
+				chunkUrls = [];
 
-				};
+				while( encoded.length > 2000 ){
+				    chunks.push(encoded.slice(0,2000));
+				    encoded = encoded.slice(2000,encoded.length);
+				}
+
+				chunks.push(encoded);
+
+				for (var i = 0; i < chunks.length; i++) {
+					var chunk = chunks[i];
+					getShortUrl(window.location.href.replace(/#/, '') + '#' + chunk).success(function(res){
+						chunkUrls.push( res.data.url.split('http://bit.ly/')[1] );
+						if (chunks.length == chunkUrls.length){
+							getShortUrl(window.location.href.replace(/#/,'')+'#expand='+chunkUrls)
+								.success(function(res){
+									$('#short_url').val(res.data.url);
+								});
+						}
+					});
+				}
+
 			};
 
 			$('#language').change(function(){
@@ -156,7 +172,7 @@
 					, input
 					, data;
 
-				input = window.aceEditor.getSession().getValue()
+				input = window.aceEditor.getSession().getValue();
 				language = $('#language').val();
 
 				//Add on some meta-data wooooo
@@ -166,36 +182,35 @@
 				}
 				deflated = RawDeflate.deflate(JSON.stringify(data));
 				base64 = Base64.toBase64(deflated);
-				//generate a checksum and tack it onto the end of the base64 encoded string
-				//check = checksum(base64);
-				encoded = base64; //+ check;
-				// window.location.hash = encoded;
+				encoded = base64;
+
 				if ( encoded.length > 2047 ){
 					chunkEncoded( encoded );
 				}else{
 					longurl = window.location.href.replace(/#/, '') + '#' + encoded;
-					getShortUrl( longurl );
+					getShortUrl(longurl).success(function(res){ $('#short_url').val(res.data.url); });
 				}
 
 			});
 
 			if (window.location.hash) {
-				getShortUrl(window.location.href);
+				getShortUrl(window.location.href).success(function(res){ $('#short_url').val(res.data.url); });
 				encoded = window.location.hash.replace(/^#/, '');
 				window.location.hash = '';
-				base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
-				//check = parseInt(encoded.slice(encoded.length - 1, encoded.length + 1 || 9e9));
-				//if (check !== checksum(base64)) {
-				//	return alert('Something got corrupted :(');
-				//} else {
-				deflated = Base64.fromBase64(base64);
-				input = RawDeflate.inflate(deflated);
-				var decoded_input = JSON.parse(input)
-				$('#language').val(decoded_input.language)
-				window.aceEditor.getSession().setValue(decoded_input.paste_data)
-				setAceMode(decoded_input.language)
-				return true
-				//}
+
+				if (encoded.lastIndexOf("expand", 0) === 0){
+					//expand multiple bit.ly urls here and decode the returned mega-hash
+				}else{
+					base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
+					deflated = Base64.fromBase64(base64);
+					input = RawDeflate.inflate(deflated);
+
+					var decoded_input = JSON.parse(input);
+					$('#language').val(decoded_input.language);
+
+					window.aceEditor.getSession().setValue(decoded_input.paste_data);
+					setAceMode(decoded_input.language);
+				}
 			}
 		})
 	</script>
