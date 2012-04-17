@@ -105,6 +105,7 @@
 			, encoded
 			, input
 			, chunkEncoded
+			, expandShortUrl
 			, getShortUrl;
 
 			getShortUrl = function(url){
@@ -120,6 +121,22 @@
 					, success: function(res){
 						shortUrl = res.data.url;
 						return shortUrl;
+					}
+				});
+			};
+
+			expandShortUrl = function(hashes){
+				return $.ajax({
+					url:"http://api.bitly.com/v3/expand?callback=?"
+					, dataType: 'json'
+					, data: {
+						"format": "json"
+						, "apiKey": "R_db4dda4e46e10ee6f38868ecf63359c5"
+						, "login": "tjkells"
+						, "hash": hashes
+					}
+					, success: function(res){
+						return res;
 					}
 				});
 			};
@@ -200,6 +217,10 @@
 
 				if (encoded.lastIndexOf("expand", 0) === 0){
 					//expand multiple bit.ly urls here and decode the returned mega-hash
+
+					//bitly hashes are comma-separated
+					var hashes = encoded.split('expand=')[1].split(',');
+					expandShortUrl(hashes).success(function(res){console.log(res)});
 				}else{
 					base64 = encoded.slice(0, (encoded.length - 2) + 1 || 9e9);
 					deflated = Base64.fromBase64(base64);
